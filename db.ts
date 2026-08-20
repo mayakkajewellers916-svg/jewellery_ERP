@@ -29,8 +29,96 @@ export const generateBillNo = async () => {
   return `MJ-${padded}`;
 };
 
+export const restoreInventoryStock = async (billItems: any[]) => {
+  for (const billItem of billItems) {
+    if (!billItem.barcode && !billItem.item_name) continue;
+
+    // 1. Check if item currently exists in items table by ID or barcode
+    let existingItem: any = null;
+
+    if (billItem.inventory_item_id) {
+      const targetId = (typeof billItem.inventory_item_id === 'string' && !isNaN(Number(billItem.inventory_item_id)))
+        ? Number(billItem.inventory_item_id)
+        : billItem.inventory_item_id;
+
+      const { data: byId } = await supabase
+        .from('items')
+        .select('*')
+        .eq('id', targetId)
+        .limit(1);
+
+      if (byId && byId.length > 0) {
+        existingItem = byId[0];
+      }
+    }
+
+    if (!existingItem && billItem.barcode) {
+      const { data: matchedItems } = await supabase
+        .from('items')
+        .select('*')
+        .eq('barcode', billItem.barcode);
+
+      if (matchedItems && matchedItems.length > 0) {
+        existingItem = matchedItems[0];
+      }
+    }
+
+    if (existingItem) {
+      // Item exists in inventory: increment quantity and set stock_status in_stock
+      const currentQty = Number(existingItem.quantity || 0);
+      await supabase
+        .from('items')
+        .update({
+          quantity: currentQty + 1,
+          stock_status: 'in_stock'
+        })
+        .eq('id', existingItem.id);
+    } else {
+      // Item was deleted from inventory when sold: re-create the product record back into items table!
+      let category = billItem.category || '';
+      let cleanName = billItem.item_name || '';
+
+      if (!category && cleanName.includes('[') && cleanName.includes(']')) {
+        const match = cleanName.match(/^(.*?)\s*\[(.*?)\]$/);
+        if (match) {
+          cleanName = match[1].trim();
+          category = match[2].trim();
+        }
+      }
+
+      const wt = Number(billItem.net_weight || billItem.weight || billItem.gross_weight || 0);
+
+      await supabase.from('items').insert({
+        barcode: billItem.barcode || `MJ-RESTORED-${Date.now().toString().slice(-4)}`,
+        item_name: cleanName || 'Restored Item',
+        category: category || 'General',
+        gross_weight: billItem.gross_weight || wt,
+        net_weight: billItem.net_weight || wt,
+        weight: wt,
+        metal_type: billItem.metal_type || 'Gold',
+        purity: billItem.purity || '22K',
+        hsn_code: billItem.hsn_code || '711319',
+        making_charges: billItem.making_charges || 0,
+        quantity: 1,
+        stock_status: 'in_stock'
+      });
+    }
+  }
+};
+
 export const deleteBill = async (id: number) => {
-  // Items will be deleted by CASCADE if set up, or manually
+  // 1. Fetch bill items before deleting the bill
+  const { data: billItems } = await supabase
+    .from('bill_items')
+    .select('*')
+    .eq('bill_id', id);
+
+  // 2. Restore sold products back into inventory
+  if (billItems && billItems.length > 0) {
+    await restoreInventoryStock(billItems);
+  }
+
+  // 3. Delete bill items and bill record
   const { error: itemsError } = await supabase
     .from('bill_items')
     .delete()
