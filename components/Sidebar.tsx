@@ -40,9 +40,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const isStaff = userRole === 'staff' || isStaffMode;
 
-  // Staff users only see Billing POS (Sales Bill)
+  // Staff users have access to Sales Bill, All Sales, Layaway, Order Booking, and Customers (Inventory hidden)
+  const staffAllowed = ['sales-bill', 'all-sales', 'layaway', 'advance', 'customers'];
   const visibleNavItems = isStaff 
-    ? NAV_ITEMS.filter(item => item.id === 'sales-bill')
+    ? NAV_ITEMS.filter(item => staffAllowed.includes(item.id))
     : NAV_ITEMS;
 
   return (

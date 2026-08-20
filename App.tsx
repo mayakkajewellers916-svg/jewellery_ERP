@@ -45,8 +45,9 @@ const App: React.FC = () => {
   };
 
   const navigateToModule = (module: string) => {
-    // If staff role, force sales-bill only
-    if (userRole === 'staff' && module !== 'sales-bill') {
+    // If staff role, restrict access to Inventory / Master admin modules only
+    const staffAllowed = ['sales-bill', 'all-sales', 'layaway', 'advance', 'customers'];
+    if (userRole === 'staff' && !staffAllowed.includes(module)) {
       return;
     }
     if (module !== 'sales-bill') {
