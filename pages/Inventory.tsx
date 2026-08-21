@@ -754,6 +754,7 @@ export const Inventory: React.FC = () => {
                                     onChange={e => handleInputChange('category', e.target.value)}
                                     options={[
                                         {value: 'Ring', label: 'Ring'},
+                                        {value: 'Bangle', label: 'Bangle'},
                                         {value: 'Chain', label: 'Chain'},
                                         {value: 'Haar', label: 'Haar'},
                                         {value: 'Laccha', label: 'Laccha'},
