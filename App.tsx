@@ -21,61 +21,10 @@ const App: React.FC = () => {
   // User Role State
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const [userRole, setUserRole] = useState<string>(currentUser.role || 'admin');
-  const [isAdminAuthModalOpen, setIsAdminAuthModalOpen] = useState(false);
-  const [adminPasswordInput, setAdminPasswordInput] = useState('');
-  const [adminAuthError, setAdminAuthError] = useState('');
 
   const handleLogout = () => {
     localStorage.removeItem('user');
     setIsLoggedIn(false);
-  };
-
-  const handleToggleRole = () => {
-    if (userRole === 'staff') {
-      // Prompt password to unlock Admin
-      setAdminPasswordInput('');
-      setAdminAuthError('');
-      setIsAdminAuthModalOpen(true);
-    } else {
-      // Switch back to staff mode
-      setUserRole('staff');
-      setActiveModule('sales-bill');
-    }
-  };
-
-  const handleVerifyAdminPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAdminAuthError('');
-    const inputPass = adminPasswordInput.trim();
-    if (!inputPass) {
-      setAdminAuthError('Password is required.');
-      return;
-    }
-
-    try {
-      // Check database for admin password match
-      const { data: adminUsers } = await supabase
-        .from('users')
-        .select('*')
-        .eq('role', 'admin');
-
-      const isMatch = adminUsers?.some(u => u.password_hash === inputPass) || inputPass === 'admin' || inputPass === 'admin123';
-
-      if (isMatch) {
-        setUserRole('admin');
-        setIsAdminAuthModalOpen(false);
-        setAdminPasswordInput('');
-      } else {
-        setAdminAuthError('Incorrect Admin Password. Access Denied.');
-      }
-    } catch (err) {
-      if (inputPass === 'admin' || inputPass === 'admin123') {
-        setUserRole('admin');
-        setIsAdminAuthModalOpen(false);
-      } else {
-        setAdminAuthError('Invalid Admin Password.');
-      }
-    }
   };
 
   const handleZoomIn = () => setZoomLevel(prev => Math.min(prev + 0.05, 1.2));
@@ -88,9 +37,8 @@ const App: React.FC = () => {
   };
 
   const navigateToModule = (module: string) => {
-    // If staff role, restrict access to Inventory / Master admin modules only
-    const staffAllowed = ['sales-bill', 'all-sales', 'layaway', 'advance', 'customers'];
-    if (userRole === 'staff' && !staffAllowed.includes(module)) {
+    // Staff role is strictly restricted to sales-bill POS only
+    if (userRole === 'staff' && module !== 'sales-bill') {
       return;
     }
     if (module !== 'sales-bill') {
@@ -155,7 +103,6 @@ const App: React.FC = () => {
           activeModule={activeModule}
           setActiveModule={navigateToModule}
           userRole={userRole}
-          onToggleRole={handleToggleRole}
         />
       </div>
       
@@ -245,56 +192,6 @@ const App: React.FC = () => {
           </div>
         </div>
       </main>
-
-      {/* ADMIN AUTHENTICATION MODAL */}
-      {isAdminAuthModalOpen && (
-        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-2xl border border-gold-500/30 w-full max-w-md overflow-hidden animate-in zoom-in-95">
-            <div className="bg-charcoal-900 text-white px-6 py-4 flex justify-between items-center">
-              <div>
-                <h3 className="font-bold text-base text-gold-400">🔒 Admin Access Unlock</h3>
-                <p className="text-xs text-gray-400">Enter Admin Password to switch to Full ERP mode</p>
-              </div>
-              <button onClick={() => setIsAdminAuthModalOpen(false)} className="text-gray-400 hover:text-white">
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleVerifyAdminPassword} className="p-6 space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-charcoal-800 uppercase mb-1">Admin Password</label>
-                <input
-                  type="password"
-                  autoFocus
-                  placeholder="••••••••"
-                  value={adminPasswordInput}
-                  onChange={(e) => setAdminPasswordInput(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded p-2.5 text-sm font-mono focus:border-gold-500 focus:bg-white outline-none"
-                />
-                {adminAuthError && (
-                  <p className="text-xs text-red-500 font-bold mt-1.5">{adminAuthError}</p>
-                )}
-              </div>
-
-              <div className="pt-2 flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsAdminAuthModalOpen(false)}
-                  className="px-4 py-2 rounded text-xs font-bold text-gray-600 hover:bg-gray-100"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded text-xs font-bold bg-gold-600 hover:bg-gold-700 text-white shadow-md"
-                >
-                  Unlock Admin
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
