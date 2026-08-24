@@ -69,16 +69,42 @@ export const AdvanceBooking: React.FC = () => {
   const [newCustomerDetails, setNewCustomerDetails] = useState({ name: '', phone: '', address: '' });
   const [deliveryDate, setDeliveryDate] = useState('');
   const [items, setItems] = useState<any[]>([]);
-  const [newItem, setNewItem] = useState<any>({ name: '', weight: 0, purity: '22K', rate: 0, makingCharges: 0, metalType: 'gold' });
+  const [newItem, setNewItem] = useState<any>({
+    name: '',
+    weight: 0,
+    purity: '22K (916)',
+    rate: 0,
+    makingChargesAmount: '',
+    makingChargesPercentage: '',
+    makingCharges: 0,
+    metalType: 'gold'
+  });
   const [metalRates, setMetalRates] = useState<any>(null);
+
+  // Live customer search effect
+  useEffect(() => {
+    if (!customerSearch.trim()) {
+      setFoundCustomers([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const results = await searchCustomers(customerSearch);
+        setFoundCustomers(results || []);
+      } catch (err) {
+        console.error(err);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [customerSearch]);
 
   // Sync initial rate when rates are loaded or item is reset
   useEffect(() => {
     if (metalRates && !newItem.rate) {
       let rate = 0;
-      if (newItem.purity === '22K' || newItem.purity === '916') rate = metalRates.gold22k;
-      else if (newItem.purity === '18K' || newItem.purity === '750') rate = metalRates.gold18k;
-      else if (newItem.purity === '24K' || newItem.purity === 'gold') rate = metalRates.goldStd;
+      if (newItem.purity.includes('22K') || newItem.purity.includes('916')) rate = metalRates.gold22k;
+      else if (newItem.purity.includes('18K') || newItem.purity.includes('750')) rate = metalRates.gold18k;
+      else if (newItem.purity.includes('24K') || newItem.purity.includes('Pure')) rate = metalRates.goldStd;
       
       if (rate > 0) {
         setNewItem(prev => ({ ...prev, rate }));
@@ -196,40 +222,64 @@ export const AdvanceBooking: React.FC = () => {
     setIsAddingCustomer(false);
   };
   const handleAddItem = () => {
-    if (!newItem.name || !newItem.weight) return;
+    if (!newItem.name || !newItem.weight) {
+      toast({ title: 'Missing Information', description: 'Item name and weight are required.', variant: 'destructive' });
+      return;
+    }
     const weight = Number(newItem.weight);
-    const purity = newItem.purity || '22K';
+    const purity = newItem.purity || '22K (916)';
     // Auto-fetch rate if available
     let rate = Number(newItem.rate);
     if (!rate && metalRates) {
-      if (purity === '22K' || purity === '916') rate = metalRates.gold22k;
-      else if (purity === '18K' || purity === '750') rate = metalRates.gold18k;
-      else if (purity === '24K' || purity === 'gold') rate = metalRates.goldStd;
+      if (purity.includes('22K') || purity.includes('916')) rate = metalRates.gold22k;
+      else if (purity.includes('18K') || purity.includes('750')) rate = metalRates.gold18k;
+      else if (purity.includes('24K') || purity.includes('Pure')) rate = metalRates.goldStd;
     }
-    const making = Number(newItem.makingCharges || 0);
-    const lineTotal = (weight * rate) + making;
+
+    let makingCharges = 0;
+    if (newItem.makingChargesAmount) {
+      makingCharges = parseFloat(newItem.makingChargesAmount) || 0;
+    } else if (newItem.makingChargesPercentage) {
+      const pct = parseFloat(newItem.makingChargesPercentage) || 0;
+      makingCharges = (weight * rate) * (pct / 100);
+    } else if (newItem.makingCharges) {
+      makingCharges = Number(newItem.makingCharges);
+    }
+
+    const lineTotal = (weight * rate) + makingCharges;
     const item = {
       id: Date.now().toString(),
       name: newItem.name,
       metalType: newItem.metalType || 'gold',
       weight,
       rate,
-      makingCharges: making,
+      makingCharges,
       purity,
       lineTotal
     };
     setItems([...items, item]);
-    setNewItem({ weight: 0, rate: 0, makingCharges: 0, purity: '22K', name: '', metalType: 'gold' });
+    setNewItem({
+      weight: 0,
+      rate: rate || 0,
+      makingChargesAmount: '',
+      makingChargesPercentage: '',
+      makingCharges: 0,
+      purity: '22K (916)',
+      name: '',
+      metalType: 'gold'
+    });
   };
+
   const handleEditBooking = (booking: any) => {
     setEditingBookingId(booking.id);
     setSelectedCustomer(booking.bills?.customers || null);
     setDeliveryDate(booking.delivery_date);
     setAdvanceInput(booking.advance_amount.toString());
     setNotes(booking.customer_notes || '');
+    if (booking.bills?.sale_type) {
+      setSaleType(booking.bills.sale_type === 'nongst' ? 'NON GST' : 'GST');
+    }
     
-    // Process items if they are stored in item_description or if we had a structured way.
-    // Since structured items aren't in the main booking table, we might need to fetch bill_items.
     const fetchItems = async () => {
       const { data: billItems, error } = await supabase
         .from('bill_items')
@@ -278,18 +328,20 @@ export const AdvanceBooking: React.FC = () => {
         const booking = bookings.find(b => b.id === editingBookingId);
         if (booking && booking.bill_id) {
            await supabase.from('bills').update({
-             subtotal: finalTotal,
+             sale_type: saleType === 'NON GST' ? 'nongst' : 'gst',
+             subtotal: itemsTotal,
+             gst_amount: gstAmount,
              grand_total: finalTotal,
              advance_amount: parseFloat(advanceInput) || 0,
              remaining_amount: balanceDue
            }).eq('id', booking.bill_id);
 
-           // Update items - for simplicity delete and recreate
+           // Update items - delete and recreate
            await supabase.from('bill_items').delete().eq('bill_id', booking.bill_id);
            const itemsToInsert = items.map(item => ({
               bill_id: booking.bill_id,
               item_name: item.name,
-              metal_type: item.metalType,
+              metal_type: item.metalType || 'gold',
               purity: item.purity,
               weight: item.weight,
               rate: item.rate,
@@ -321,8 +373,9 @@ export const AdvanceBooking: React.FC = () => {
       const bill = await createBill({
         bill_no: generatedBillNo,
         customer_id: customerId,
-        sale_type: 'nongst', // Defaulting to nongst if not specified
-        subtotal: finalTotal,
+        sale_type: saleType === 'NON GST' ? 'nongst' : 'gst',
+        subtotal: itemsTotal,
+        gst_amount: gstAmount,
         grand_total: finalTotal,
         advance_amount: parseFloat(advanceInput) || 0,
         remaining_amount: balanceDue,
@@ -338,6 +391,21 @@ export const AdvanceBooking: React.FC = () => {
         customer_notes: notes,
         booking_status: 'active'
       });
+
+      // Save item records into bill_items
+      if (items.length > 0) {
+        const itemsToInsert = items.map(item => ({
+          bill_id: bill.id,
+          item_name: item.name,
+          metal_type: item.metalType || 'gold',
+          purity: item.purity,
+          weight: item.weight,
+          rate: item.rate,
+          making_charges: item.makingCharges,
+          line_total: item.lineTotal
+        }));
+        await supabase.from('bill_items').insert(itemsToInsert);
+      }
       toast({ title: 'Success', description: 'Booking created successfully.' });
       setIsModalOpen(false);
       fetchData();
@@ -712,7 +780,7 @@ export const AdvanceBooking: React.FC = () => {
                               </button>
                            </div>
                         </div>
-                        <div className="grid grid-cols-12 gap-3 mb-4 items-end bg-gray-50 p-3 rounded border border-gray-100">
+                        <div className="grid grid-cols-12 gap-2 mb-4 items-end bg-gray-50 p-3 rounded border border-gray-100">
                            <div className="col-span-3"><Input label="Item Name" placeholder="e.g. Ring / Bangle" value={newItem.name || ''} onChange={e => setNewItem({...newItem, name: e.target.value})} /></div>
                            <div className="col-span-2"><Select label="Purity" options={[
                              {value:'24K (Pure)', label:'24K (Pure)'},
@@ -734,7 +802,25 @@ export const AdvanceBooking: React.FC = () => {
                            }} /></div>
                            <div className="col-span-2"><Input label="Wt (g)" type="number" isMonospaced value={newItem.weight || ''} onChange={e => setNewItem({...newItem, weight: parseFloat(e.target.value)})} /></div>
                            <div className="col-span-2"><Input label="Rate/g" type="number" isMonospaced value={newItem.rate || ''} onChange={e => setNewItem({...newItem, rate: parseFloat(e.target.value)})} /></div>
-                           <div className="col-span-2"><Input label="Making (MC)" type="number" isMonospaced value={newItem.makingCharges || ''} onChange={e => setNewItem({...newItem, makingCharges: parseFloat(e.target.value)})} /></div>
+                           <div className="col-span-2">
+                             <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Making (MC)</label>
+                             <div className="flex gap-1">
+                               <input 
+                                 type="number" 
+                                 placeholder="Amt ₹" 
+                                 className="w-1/2 bg-white border border-gray-300 rounded p-1.5 text-xs font-mono focus:border-gold-500 outline-none" 
+                                 value={newItem.makingChargesAmount || ''} 
+                                 onChange={e => setNewItem({...newItem, makingChargesAmount: e.target.value, makingChargesPercentage: ''})} 
+                               />
+                               <input 
+                                 type="number" 
+                                 placeholder="%" 
+                                 className="w-1/2 bg-white border border-gray-300 rounded p-1.5 text-xs font-mono focus:border-gold-500 outline-none" 
+                                 value={newItem.makingChargesPercentage || ''} 
+                                 onChange={e => setNewItem({...newItem, makingChargesPercentage: e.target.value, makingChargesAmount: ''})} 
+                               />
+                             </div>
+                           </div>
                            <div className="col-span-1"><Button onClick={handleAddItem} className="w-full !px-0 bg-gold-500 hover:bg-gold-600"><Plus size={20}/></Button></div>
                         </div>
                         <div className="border border-gray-200 rounded overflow-hidden flex-1 overflow-auto min-h-[200px]">
@@ -829,7 +915,7 @@ export const AdvanceBooking: React.FC = () => {
       {/* 5. PRINT COMPONENTS (STRICTLY FOR PRINTER) */}
       <div className="hidden print:block print-block">
         {selectedBookingForPrint && (
-          <AdvanceBookingPrint bookingNo={selectedBookingForPrint.bills?.bill_no || '-'} bookingDate={selectedBookingForPrint.booking_date} deliveryDate={selectedBookingForPrint.delivery_date} customerName={selectedBookingForPrint.bills?.customers?.name || 'Unknown'} customerPhone={selectedBookingForPrint.bills?.customers?.phone || '-'} items={selectedBookingForPrint.structuredItems || []} itemDescription={selectedBookingForPrint.item_description} totalAmount={selectedBookingForPrint.total_amount} advanceAmount={selectedBookingForPrint.advance_amount} balanceDue={selectedBookingForPrint.total_amount - selectedBookingForPrint.advance_amount} notes={selectedBookingForPrint.customer_notes} />
+          <AdvanceBookingPrint bookingNo={selectedBookingForPrint.bills?.bill_no || '-'} bookingDate={selectedBookingForPrint.booking_date} deliveryDate={selectedBookingForPrint.delivery_date} customerName={selectedBookingForPrint.bills?.customers?.name || 'Unknown'} customerPhone={selectedBookingForPrint.bills?.customers?.phone || '-'} customerAddress={selectedBookingForPrint.bills?.customers?.address} items={selectedBookingForPrint.structuredItems || []} itemDescription={selectedBookingForPrint.item_description} totalAmount={selectedBookingForPrint.total_amount} advanceAmount={selectedBookingForPrint.advance_amount} balanceDue={selectedBookingForPrint.total_amount - selectedBookingForPrint.advance_amount} notes={selectedBookingForPrint.customer_notes} />
         )}
       </div>
       {/* 6. ON-SCREEN PREVIEW MODAL */}
@@ -851,7 +937,7 @@ export const AdvanceBooking: React.FC = () => {
               </div>
               <div className="flex-1 overflow-auto bg-gray-200 p-8 custom-scrollbar">
                 <div className="scale-90 origin-top">
-                    <AdvanceBookingPrint isScreenPreview bookingNo={selectedBookingForPrint.bills?.bill_no || '-'} bookingDate={selectedBookingForPrint.booking_date} deliveryDate={selectedBookingForPrint.delivery_date} customerName={selectedBookingForPrint.bills?.customers?.name || 'Unknown'} customerPhone={selectedBookingForPrint.bills?.customers?.phone || '-'} items={selectedBookingForPrint.structuredItems || []} itemDescription={selectedBookingForPrint.item_description} totalAmount={selectedBookingForPrint.total_amount} advanceAmount={selectedBookingForPrint.advance_amount} balanceDue={selectedBookingForPrint.total_amount - selectedBookingForPrint.advance_amount} notes={selectedBookingForPrint.customer_notes} />
+                    <AdvanceBookingPrint isScreenPreview bookingNo={selectedBookingForPrint.bills?.bill_no || '-'} bookingDate={selectedBookingForPrint.booking_date} deliveryDate={selectedBookingForPrint.delivery_date} customerName={selectedBookingForPrint.bills?.customers?.name || 'Unknown'} customerPhone={selectedBookingForPrint.bills?.customers?.phone || '-'} customerAddress={selectedBookingForPrint.bills?.customers?.address} items={selectedBookingForPrint.structuredItems || []} itemDescription={selectedBookingForPrint.item_description} totalAmount={selectedBookingForPrint.total_amount} advanceAmount={selectedBookingForPrint.advance_amount} balanceDue={selectedBookingForPrint.total_amount - selectedBookingForPrint.advance_amount} notes={selectedBookingForPrint.customer_notes} />
                 </div>
               </div>
            </div>

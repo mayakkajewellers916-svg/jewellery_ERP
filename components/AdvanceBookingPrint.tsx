@@ -18,6 +18,7 @@ interface AdvanceBookingPrintProps {
   deliveryDate: string;
   customerName: string;
   customerPhone: string;
+  customerAddress?: string;
   items: BookingItem[];
   itemDescription?: string; // Added to support string descriptions from DB
   totalAmount: number;
@@ -41,6 +42,7 @@ export const AdvanceBookingPrint: React.FC<AdvanceBookingPrintProps> = ({
   deliveryDate,
   customerName,
   customerPhone,
+  customerAddress,
   items,
   itemDescription,
   totalAmount,
@@ -99,6 +101,7 @@ export const AdvanceBookingPrint: React.FC<AdvanceBookingPrintProps> = ({
           <div className="text-xs">
             <p className="font-bold font-serif text-charcoal-900 tracking-tight">{customerName}</p>
             <p className="font-mono text-gray-600 text-[9px]">{customerPhone}</p>
+            {customerAddress && <p className="text-gray-500 text-[8px] truncate">{customerAddress}</p>}
           </div>
         </div>
         
