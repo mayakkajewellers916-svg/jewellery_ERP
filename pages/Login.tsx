@@ -59,7 +59,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
         can_edit_stock: user.can_edit_stock,
         can_authorize_nongst: user.can_authorize_nongst,
       };
-      
+
       localStorage.setItem('user', JSON.stringify(userData));
       toast({ title: 'Welcome Back', description: `Authenticated as ${user.role?.toUpperCase() || 'ADMIN'}` });
       onLogin();
@@ -76,31 +76,28 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
       <div className="w-full max-w-md bg-white p-10 shadow-soft-gold rounded-sm border-[0.5px] border-gold-500/20 relative overflow-hidden shadow-2xl">
         {/* Decorative corner accent */}
         <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-bl from-gold-100/50 to-transparent rounded-bl-full pointer-events-none" />
-        
+
         <div className="mb-8">
           <Logo />
         </div>
 
         <form onSubmit={handleLoginSubmit} className="space-y-6">
           <div className="bg-gray-50 p-4 rounded border border-gray-200 text-center space-y-1">
-            <h3 className="font-bold text-xs text-charcoal-900 uppercase tracking-tight">Showroom Login Portal</h3>
-            <p className="text-[11px] text-gray-500">
-              Enter Admin ID & Password for Admin ERP, or click <strong className="text-gold-700">LOGIN TO SYSTEM</strong> directly for Staff POS Billing.
-            </p>
+            <h3 className="font-bold text-xs text-charcoal-100 uppercase tracking-tight">Login Portal</h3>
           </div>
 
           <div className="space-y-4">
-            <UnderlineInput 
-              label="Username / Admin ID" 
-              placeholder="Admin ID (Optional for Staff)"
+            <UnderlineInput
+              label="Username / Admin ID"
+              placeholder="Admin ID"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               disabled={loading}
             />
-            <UnderlineInput 
-              label="Password" 
-              type="password" 
-              placeholder="Password (Optional for Staff)"
+            <UnderlineInput
+              label="Password"
+              type="password"
+              placeholder="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={loading}
